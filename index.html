@@ -774,6 +774,23 @@
     const MAX_PLAYS = 5;
     let STORAGE_KEY = ''; // set after login
 
+    // ===== GOOGLE SHEETS TRACKING =====
+    // Incolla qui l'URL del tuo Google Apps Script (vedi istruzioni)
+    const TRACKING_URL = ''; // es: 'https://script.google.com/macros/s/XXXX/exec'
+
+    function track(event, extraData) {
+      if (!TRACKING_URL) return; // skip se URL non configurato
+      const email = (window._userEmail || '');
+      const payload = { email, event, timestamp: new Date().toISOString(), ...extraData };
+      // no-cors: non riceviamo risposta ma i dati vengono salvati
+      fetch(TRACKING_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).catch(() => {}); // silenzioso se offline
+    }
+
     function getPlaysUsed() {
       if (!STORAGE_KEY) return 0;
       try { return parseInt(localStorage.getItem(STORAGE_KEY) || '0', 10); }
@@ -974,10 +991,12 @@
               // Esaurisce tutte le giocate rimaste per bloccare ulteriori spin
               try { localStorage.setItem(STORAGE_KEY, String(MAX_PLAYS)); } catch {}
               setWinResult(wonPrize, finalSymbols);
+              track('vincita', { result: 'vincita', prize: wonPrize.code, prizeLabel: wonPrize.label, combination: finalSymbols.join('-'), playsUsed: MAX_PLAYS });
             } else {
               resultPanel.classList.remove('show');
               statusText.textContent = `Nessuno sconto: ${finalSymbols.map(k => getSymbolByKey(k).name).join(' • ')}`;
               statusText.classList.remove('jackpot');
+              track('spin', { result: 'nessuna_vincita', combination: finalSymbols.join('-'), playsUsed: getPlaysUsed() });
             }
             isSpinning = false;
             spinBtn.disabled = false;
@@ -1120,8 +1139,10 @@
         }
         // Build per-email key (v2 prefix resets old device-only keys)
         STORAGE_KEY = 'mythai_v2_' + btoa(email).replace(/=/g,'');
+        window._userEmail = email;
         overlay.style.display = 'none';
         updatePlaysUI();
+        track('login', { playsUsed: getPlaysUsed() });
       }
 
       btnEl.addEventListener('click', loginAndStart);
